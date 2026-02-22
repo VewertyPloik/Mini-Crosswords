@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Crossword</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            background-color: #ffffff; color: #333;
+            margin: 0; padding: 20px 10px;
+            touch-action: manipulation;
+        }
+        
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            width: 100%; max-width: 400px;
+            border-bottom: 2px solid #ebebeb; padding-bottom: 10px; margin-bottom: 15px;
+        }
+        h1 { font-size: 24px; font-weight: 700; margin: 0; }
+        .timer { font-size: 18px; font-weight: bold; }
+        
+        .toolbar {
+            display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center;
+        }
+        button.tool-btn {
+            background: #eee; border: none; padding: 8px 12px; border-radius: 5px;
+            font-weight: bold; cursor: pointer; font-size: 14px;
+        }
+        button.tool-btn:hover { background: #ddd; }
+        button.tool-btn.primary { background: #000; color: #fff; }
+        button.tool-btn.primary:hover { background: #333; }
+        button.tool-btn.share { background: #4CAF50; color: white; margin-top: 10px; width: 100%; padding: 12px; font-size: 16px;}
+        button.tool-btn.share:hover { background: #45a049; }
+
+        .game-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 400px; position: relative; }
+        
+        .grid {
+            display: grid; grid-template-columns: repeat(5, 55px); grid-template-rows: repeat(5, 55px);
+            border: 2px solid #000; background-color: #000; gap: 2px; margin-bottom: 20px;
+        }
+        
+        .cell {
+            width: 55px; height: 55px; background-color: #fff;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 28px; font-weight: bold; text-transform: uppercase;
+            cursor: pointer; position: relative; user-select: none;
+        }
+        
+        .cell.black { background-color: #000; cursor: default; }
+        .cell.black .number { display: none; }
+        .cell.word-highlight { background-color: #a7d8ff; }
+        .cell.active { background-color: #ffda00; }
+        .cell.wrong { color: #e00000; text-decoration: line-through; }
+        .cell .number { position: absolute; top: 2px; left: 2px; font-size: 12px; font-weight: normal; color: #333; text-decoration: none;}
+
+        .active-clue-bar {
+            width: 100%; background-color: #e3e3e3; padding: 15px; border-radius: 8px;
+            font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 20px; box-sizing: border-box; min-height: 50px;
+        }
+        .keyboard { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+        .key-row { display: flex; justify-content: center; gap: 6px; }
+        .key {
+            background-color: #d3d6da; border: none; border-radius: 4px; padding: 15px 10px;
+            font-size: 18px; font-weight: bold; cursor: pointer; flex-grow: 1; max-width: 40px; text-align: center; user-select: none;
+        }
+        .key.wide { max-width: 60px; font-size: 14px; }
+        .key:active { background-color: #999c9f; }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10;
+        }
+        .modal {
+            background: #fff; padding: 25px; border-radius: 10px; text-align: center;
+            width: 80%; max-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); position: relative;
+        }
+        .modal h2 { margin-top: 0; }
+        .close-btn {
+            position: absolute; top: 10px; right: 15px; font-size: 20px; cursor: pointer; font-weight: bold; color: #888;
+        }
+
+        #completed-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 5; text-align: center; padding: 20px; box-sizing: border-box;
+        }
+        #completed-screen h2 { font-size: 22px; margin-bottom: 5px; }
+        #countdown-timer { font-size: 28px; font-weight: bold; color: #000; margin-top: 10px; margin-bottom: 20px;}
+        
+        #confetti-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <div class="header">
+        <h1 id="mode-title">Mini Crossword By Vewerty Ploik</h1>
+        <div class="timer" id="timer">0:00</div>
+    </div>
+
+    <div class="toolbar">
+        <button class="tool-btn" onclick="showStats()">Stats</button>
+        <button class="tool-btn primary" onclick="checkPuzzle()">Check</button>
+    </div>
+
+    <div class="game-wrapper">
+        <div id="completed-screen">
+            <h2>You finished today's Mini!</h2>
+            <p>Next puzzle unlocks in:</p>
+            <div id="countdown-timer">--:--:--</div>
+            <button class="tool-btn share" onclick="shareScore()">📤 Share Score</button>
+        </div>
+
+        <div class="grid" id="grid"></div>
+        <div class="active-clue-bar" id="active-clue-bar"></div>
+
+        <div class="keyboard" id="keyboard">
+            <div class="key-row">
+                <button class="key">Q</button><button class="key">W</button><button class="key">E</button><button class="key">R</button><button class="key">T</button><button class="key">Y</button><button class="key">U</button><button class="key">I</button><button class="key">O</button><button class="key">P</button>
+            </div>
+            <div class="key-row">
+                <button class="key">A</button><button class="key">S</button><button class="key">D</button><button class="key">F</button><button class="key">G</button><button class="key">H</button><button class="key">J</button><button class="key">K</button><button class="key">L</button>
+            </div>
+            <div class="key-row">
+                <button class="key">Z</button><button class="key">X</button><button class="key">C</button><button class="key">V</button><button class="key">B</button><button class="key">N</button><button class="key">M</button><button class="key wide" id="bksp">⌫</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <span class="close-btn" onclick="closeModal()">×</span>
+            <h2 id="modal-title">Stats</h2>
+            <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <script>
+        const numPattern = [1, 2, 3, 4, ".", 5, "", "", "", ".", 6, "", "", "", ".", 7, "", "", "", ".", ".",".",".",".","."];
+        
+        // 20 Puzzles that will loop infinitely
+        const puzzles = [
+            { grid: ["S","T","A","R",".", "H","I","D","E",".", "O","M","E","N",".", "P","E","S","T",".", ".",".",".",".","."], across: [{num:1,clue:"Twinkle twinkle little ___",index:0},{num:5,clue:"Seek's partner",index:5},{num:6,clue:"Foreshadowing sign",index:10},{num:7,clue:"Annoying bug",index:15}], down: [{num:1,clue:"Where you buy groceries",index:0},{num:2,clue:"What a clock tells",index:1},{num:3,clue:"Fruity drinks",index:2},{num:4,clue:"Apartment payment",index:3}] },
+            { grid: ["C","R","A","B",".", "L","O","V","E",".", "O","M","E","N",".", "P","E","S","T",".", ".",".",".",".","."], across: [{num:1,clue:"Pinchy sea creature",index:0},{num:5,clue:"A strong affection",index:5},{num:6,clue:"Sign of things to come",index:10},{num:7,clue:"A major nuisance",index:15}], down: [{num:1,clue:"Horse hoof sound",index:0},{num:2,clue:"Capital of Italy",index:1},{num:3,clue:"Birds (Latin)",index:2},{num:4,clue:"Not straight; angled",index:3}] },
+            { grid: ["F","A","S","T",".", "E","C","H","O",".", "A","R","E","A",".", "R","E","A","D",".", ".",".",".",".","."], across: [{num:1,clue:"Very quick",index:0},{num:5,clue:"Sound bouncing back",index:5},{num:6,clue:"Region or zone",index:10},{num:7,clue:"Enjoy a good book",index:15}], down: [{num:1,clue:"Feeling afraid",index:0},{num:2,clue:"Land measurement",index:1},{num:3,clue:"Old Mets stadium",index:2},{num:4,clue:"Amphibian like a frog",index:3}] },
+            { grid: ["C","R","E","W",".", "H","O","V","E",".", "I","V","A","N",".", "P","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Rowing team",index:0},{num:5,clue:"Threw with effort",index:5},{num:6,clue:"The Terrible Tsar",index:10},{num:7,clue:"Cooped up (with 'up')",index:15}], down: [{num:1,clue:"Potato snack",index:0},{num:2,clue:"Wander aimlessly",index:1},{num:3,clue:"Actor ___ Peters",index:2},{num:4,clue:"Left the room",index:3}] },
+            { grid: ["C","R","O","P",".", "H","I","V","E",".", "O","M","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Corn or wheat",index:0},{num:5,clue:"Bee's home",index:5},{num:6,clue:"Supernatural sign",index:10},{num:7,clue:"Departed",index:15}], down: [{num:1,clue:"Puppy chow, e.g.",index:0},{num:2,clue:"Frost coating",index:1},{num:3,clue:"Where you bake",index:2},{num:4,clue:"Confined",index:3}] },
+            { grid: ["G","L","O","W",".", "R","A","V","E",".", "O","M","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Shine in the dark",index:0},{num:5,clue:"Wild party",index:5},{num:6,clue:"Prophecy",index:10},{num:7,clue:"Left the building",index:15}], down: [{num:1,clue:"Get bigger",index:0},{num:2,clue:"Uncool",index:1},{num:3,clue:"Pizza cooker",index:2},{num:4,clue:"Departed",index:3}] },
+            { grid: ["S","H","O","P",".", "H","A","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Buy things",index:0},{num:5,clue:"Possess",index:5},{num:6,clue:"Baker's appliance",index:10},{num:7,clue:"Passed (as time)",index:15}], down: [{num:1,clue:"Concert or play",index:0},{num:2,clue:"Possess",index:1},{num:3,clue:"Baker's appliance",index:2},{num:4,clue:"Cooped (up)",index:3}] },
+            { grid: ["S","T","O","P",".", "H","A","V","E",".", "A","M","E","N",".", "G","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Red traffic light",index:0},{num:5,clue:"Own",index:5},{num:6,clue:"Church closing",index:10},{num:7,clue:"Polite fellow",index:15}], down: [{num:1,clue:"Type of carpet",index:0},{num:2,clue:"Domesticated",index:1},{num:3,clue:"Where bread is baked",index:2},{num:4,clue:"Cooped (up)",index:3}] },
+            { grid: ["F","R","E","T",".", "R","A","V","E",".", "O","V","E","N",".", "G","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Worry",index:0},{num:5,clue:"Highly positive review",index:5},{num:6,clue:"Kitchen hot spot",index:10},{num:7,clue:"Sir",index:15}], down: [{num:1,clue:"Green amphibian",index:0},{num:2,clue:"Highly positive review",index:1},{num:3,clue:"Divisible by 2",index:2},{num:4,clue:"Camping shelter",index:3}] },
+            { grid: ["B","L","O","G",".", "L","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Online journal",index:0},{num:5,clue:"Amore",index:5},{num:6,clue:"Place for a roast",index:10},{num:7,clue:"Headed out",index:15}], down: [{num:1,clue:"Wind sound",index:0},{num:2,clue:"Amore",index:1},{num:3,clue:"Place for a roast",index:2},{num:4,clue:"Polite man",index:3}] },
+            { grid: ["F","L","O","G",".", "L","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Beat with a whip",index:0},{num:5,clue:"Heart feeling",index:5},{num:6,clue:"Kitchen cooker",index:10},{num:7,clue:"Left",index:15}], down: [{num:1,clue:"Water movement",index:0},{num:2,clue:"Heart feeling",index:1},{num:3,clue:"Kitchen cooker",index:2},{num:4,clue:"Polite guy",index:3}] },
+            { grid: ["P","L","O","D",".", "L","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Walk heavily",index:0},{num:5,clue:"Adore",index:5},{num:6,clue:"Baking machine",index:10},{num:7,clue:"Took off",index:15}], down: [{num:1,clue:"Snow clearer",index:0},{num:2,clue:"Adore",index:1},{num:3,clue:"Baking machine",index:2},{num:4,clue:"Car scratch",index:3}] },
+            { grid: ["G","L","O","P",".", "L","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Sticky mess",index:0},{num:5,clue:"Tennis score of zero",index:5},{num:6,clue:"Hot appliance",index:10},{num:7,clue:"Walked away",index:15}], down: [{num:1,clue:"Radiate light",index:0},{num:2,clue:"Tennis score of zero",index:1},{num:3,clue:"Hot appliance",index:2},{num:4,clue:"Held up inside",index:3}] },
+            { grid: ["S","L","O","P",".", "L","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Pig food",index:0},{num:5,clue:"Deep fondness",index:5},{num:6,clue:"Bake sale necessity",index:10},{num:7,clue:"Scooted",index:15}], down: [{num:1,clue:"Not fast",index:0},{num:2,clue:"Deep fondness",index:1},{num:3,clue:"Bake sale necessity",index:2},{num:4,clue:"Pent (up)",index:3}] },
+            { grid: ["C","R","O","P",".", "R","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Farm yield",index:0},{num:5,clue:"Wander",index:5},{num:6,clue:"Bake in it",index:10},{num:7,clue:"Exited",index:15}], down: [{num:1,clue:"Black bird",index:0},{num:2,clue:"Wander",index:1},{num:3,clue:"Bake in it",index:2},{num:4,clue:"Trapped feeling",index:3}] },
+            // NEW PUZZLES 16-20
+            { grid: ["S","T","E","P",".", "C","A","V","E",".", "A","R","E","A",".", "R","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Stair",index:0},{num:5,clue:"Bat's home",index:5},{num:6,clue:"Region",index:10},{num:7,clue:"Monthly lease",index:15}], down: [{num:1,clue:"Mark from a cut",index:0},{num:2,clue:"Weight allowance",index:1},{num:3,clue:"Not odd",index:2},{num:4,clue:"Mossy soil",index:3}] },
+            { grid: ["P","L","O","T",".", "R","O","V","E",".", "O","V","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Storyline",index:0},{num:5,clue:"Wander about",index:5},{num:6,clue:"Place for a pizza",index:10},{num:7,clue:"Departed",index:15}], down: [{num:1,clue:"Front of a ship",index:0},{num:2,clue:"Adore",index:1},{num:3,clue:"Bake sale necessity",index:2},{num:4,clue:"Camping gear",index:3}] },
+            { grid: ["B","A","R","K",".", "A","L","O","E",".", "R","O","O","T",".", "K","E","T","O",".", ".",".",".",".","."], across: [{num:1,clue:"Dog sound",index:0},{num:5,clue:"Soothing plant",index:5},{num:6,clue:"Tree anchor",index:10},{num:7,clue:"Low-carb diet",index:15}], down: [{num:1,clue:"Tree covering",index:0},{num:2,clue:"Sunburn relief",index:1},{num:3,clue:"Turnip or carrot",index:2},{num:4,clue:"Popular fad diet",index:3}] },
+            { grid: ["C","O","L","D",".", "O","V","E","R",".", "L","E","V","I",".", "D","R","I","P",".", ".",".",".",".","."], across: [{num:1,clue:"Chilly",index:0},{num:5,clue:"Finished",index:5},{num:6,clue:"Jeans brand ___ Strauss",index:10},{num:7,clue:"Faucet leak",index:15}], down: [{num:1,clue:"Winter weather",index:0},{num:2,clue:"Above",index:1},{num:3,clue:"Biblical tribe",index:2},{num:4,clue:"IV fluid delivery",index:3}] },
+            { grid: ["G","R","O","W",".", "R","O","P","E",".", "O","P","E","N",".", "W","E","N","T",".", ".",".",".",".","."], across: [{num:1,clue:"Get bigger",index:0},{num:5,clue:"Thick cord",index:5},{num:6,clue:"Not closed",index:10},{num:7,clue:"Left",index:15}], down: [{num:1,clue:"Plant a seed and watch it ___",index:0},{num:2,clue:"Lasso material",index:1},{num:3,clue:"Unlocked",index:2},{num:4,clue:"Departed",index:3}] }
+        ];
+
+        let currentPuzzle;
+        let cells = [];
+        let activeIndex = 0;
+        let direction = 'across'; 
+        let checksUsed = 0;
+        
+        let timerInterval;
+        let countdownInterval;
+        let seconds = 0;
+        let gameStarted = false;
+        let gameWon = false;
+        let gameCounted = false; 
+
+        let stats = JSON.parse(localStorage.getItem('nytMiniStats')) || { played: 0, wins: 0, bestTime: null, leastChecks: null };
+
+        function saveStats() {
+            localStorage.setItem('nytMiniStats', JSON.stringify(stats));
+        }
+
+        function formatTime(s) {
+            if (s === null || s === undefined) return "--:--";
+            let m = Math.floor(s / 60);
+            let sec = s % 60;
+            return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+        }
+
+        function getTodayString() {
+            return new Date().toDateString();
+        }
+
+        function checkDailyLockout() {
+            let lastPlayed = localStorage.getItem('nytMiniLastPlayed');
+            let wonToday = localStorage.getItem('nytMiniWonToday');
+            if (lastPlayed === getTodayString() && wonToday === 'true') {
+                document.getElementById('completed-screen').style.display = 'flex';
+                startCountdown();
+                return true;
+            }
+            return false;
+        }
+
+        function startCountdown() {
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                const now = new Date();
+                const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                const diff = tomorrow - now;
+                
+                const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                const m = Math.floor((diff / 1000 / 60) % 60);
+                const s = Math.floor((diff / 1000) % 60);
+                
+                document.getElementById('countdown-timer').innerText = 
+                    `${h}h ${m < 10 ? '0':''}${m}m ${s < 10 ? '0':''}${s}s`;
+            }, 1000);
+        }
+
+        function initDaily() {
+            if (checkDailyLockout()) return;
+
+            clearInterval(timerInterval);
+            seconds = 0; gameStarted = false; gameWon = false; checksUsed = 0; gameCounted = false;
+            document.getElementById('timer').innerText = "0:00";
+            document.getElementById('confetti-canvas').style.display = 'none';
+
+            let dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+            currentPuzzle = puzzles[dayOfYear % puzzles.length];
+            
+            buildGrid();
+        }
+
+        function startTimer() {
+            if (gameStarted || gameWon) return;
+            gameStarted = true;
+            timerInterval = setInterval(() => {
+                seconds++;
+                document.getElementById('timer').innerText = formatTime(seconds);
+            }, 1000);
+        }
+
+        function buildGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.innerHTML = '';
+            cells = [];
+            activeIndex = 0; direction = 'across';
+
+            for (let i = 0; i < 25; i++) {
+                let cell = document.createElement('div');
+                cell.className = 'cell';
+                
+                if (numPattern[i] === ".") {
+                    cell.classList.add('black');
+                } else {
+                    if (numPattern[i] !== "") {
+                        let num = document.createElement('div');
+                        num.className = 'number';
+                        num.innerText = numPattern[i];
+                        cell.appendChild(num);
+                    }
+                    cell.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        if(gameWon) return;
+                        startTimer();
+                        if (activeIndex === i) direction = direction === 'across' ? 'down' : 'across';
+                        else activeIndex = i;
+                        updateHighlights();
+                    });
+                }
+                gridEl.appendChild(cell);
+                cells.push(cell);
+            }
+            updateHighlights();
+        }
+
+        function updateHighlights() {
+            if(!cells.length) return;
+            cells.forEach(c => { c.classList.remove('active', 'word-highlight'); });
+            let wordCells = [];
+            let currentClueText = "";
+
+            if (direction === 'across') {
+                let rowStart = Math.floor(activeIndex / 5) * 5;
+                for (let i = 0; i < 5; i++) {
+                    if (numPattern[rowStart + i] !== ".") wordCells.push(rowStart + i);
+                }
+                let clueObj = currentPuzzle.across.find(c => c.index === rowStart);
+                if(clueObj) currentClueText = `<strong>${clueObj.num}A</strong> ${clueObj.clue}`;
+            } else {
+                let colStart = activeIndex % 5;
+                for (let i = 0; i < 5; i++) {
+                    if (numPattern[colStart + (i * 5)] !== ".") wordCells.push(colStart + (i * 5));
+                }
+                let clueObj = currentPuzzle.down.find(c => c.index === colStart);
+                if(clueObj) currentClueText = `<strong>${clueObj.num}D</strong> ${clueObj.clue}`;
+            }
+
+            wordCells.forEach(idx => cells[idx].classList.add('word-highlight'));
+            cells[activeIndex].classList.add('active');
+            document.getElementById('active-clue-bar').innerHTML = currentClueText;
+        }
+
+        function typeLetter(letter) {
+            if(gameWon || numPattern[activeIndex] === ".") return;
+            startTimer();
+            cells[activeIndex].classList.remove('wrong');
+            let numHtml = cells[activeIndex].querySelector('.number') ? cells[activeIndex].querySelector('.number').outerHTML : '';
+            cells[activeIndex].innerHTML = numHtml + letter;
+            
+            if (direction === 'across') {
+                if (activeIndex % 5 !== 4 && numPattern[activeIndex + 1] !== ".") activeIndex++;
+            } else {
+                if (activeIndex < 20 && numPattern[activeIndex + 5] !== ".") activeIndex += 5;
+            }
+            
+            updateHighlights();
+            checkAutoWin();
+        }
+
+        function pressBackspace() {
+            if(gameWon || numPattern[activeIndex] === ".") return;
+            startTimer();
+            cells[activeIndex].classList.remove('wrong');
+            let numHtml = cells[activeIndex].querySelector('.number') ? cells[activeIndex].querySelector('.number').outerHTML : '';
+            let hasLetter = cells[activeIndex].innerText.replace(/[0-9]/g, '').trim().length > 0;
+            
+            if (hasLetter) {
+                cells[activeIndex].innerHTML = numHtml;
+            } else {
+                if (direction === 'across') {
+                    if (activeIndex % 5 !== 0 && numPattern[activeIndex - 1] !== ".") activeIndex--;
+                } else {
+                    if (activeIndex > 4 && numPattern[activeIndex - 5] !== ".") activeIndex -= 5;
+                }
+                cells[activeIndex].classList.remove('wrong');
+                cells[activeIndex].innerHTML = cells[activeIndex].querySelector('.number') ? cells[activeIndex].querySelector('.number').outerHTML : '';
+            }
+            updateHighlights();
+        }
+
+        function checkPuzzle() {
+            if(gameWon || !gameStarted) return;
+            if (!gameCounted) { gameCounted = true; stats.played++; saveStats(); }
+
+            checksUsed++;
+            cells.forEach((cell, i) => {
+                if (numPattern[i] === ".") return;
+                let text = cell.innerText.replace(/[0-9]/g, '').trim();
+                if (text !== "" && text !== currentPuzzle.grid[i]) {
+                    cell.classList.add('wrong');
+                }
+            });
+        }
+
+        function checkAutoWin() {
+            let isCorrect = true;
+            let isFull = true;
+            for (let i = 0; i < 25; i++) {
+                if (numPattern[i] === ".") continue;
+                let text = cells[i].innerText.replace(/[0-9]/g, '').trim();
+                if (text === "") isFull = false;
+                if (text !== currentPuzzle.grid[i]) isCorrect = false;
+            }
+            if (isFull && isCorrect) triggerWin();
+        }
+
+        function triggerWin() {
+            gameWon = true;
+            clearInterval(timerInterval);
+            
+            if (!gameCounted) { gameCounted = true; stats.played++; }
+            
+            stats.wins++;
+            if (stats.bestTime === null || seconds < stats.bestTime) stats.bestTime = seconds;
+            if (stats.leastChecks === null || checksUsed < stats.leastChecks) stats.leastChecks = checksUsed;
+            saveStats();
+
+            // Save today's exact score for sharing
+            localStorage.setItem('nytMiniTodayTime', seconds);
+            localStorage.setItem('nytMiniTodayChecks', checksUsed);
+
+            // Lock out until tomorrow
+            localStorage.setItem('nytMiniLastPlayed', getTodayString());
+            localStorage.setItem('nytMiniWonToday', 'true');
+            
+            document.getElementById('confetti-canvas').style.display = 'block';
+            fireConfetti();
+
+            setTimeout(() => {
+                document.getElementById('modal-title').innerText = "You Solved It!";
+                let time = document.getElementById('timer').innerText;
+                document.getElementById('modal-content').innerHTML = `
+                    <p>Time: <strong>${time}</strong></p>
+                    <p>Checks used: <strong>${checksUsed}</strong></p>
+                    <button class="tool-btn share" onclick="shareScore()">📤 Share Score</button>
+                    <hr>
+                    <p>Best Time: <strong>${formatTime(stats.bestTime)}</strong></p>
+                    <p>Least Checks: <strong>${stats.leastChecks}</strong></p>
+                    <p>Win Rate: <strong>${Math.round((stats.wins / stats.played) * 100)}%</strong></p>
+                `;
+                document.getElementById('modal-overlay').style.display = 'flex';
+            }, 1500);
+        }
+
+        function showStats() {
+            document.getElementById('modal-title').innerText = "Stats";
+            let rate = stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0;
+            document.getElementById('modal-content').innerHTML = `
+                <p>Games Played: <strong>${stats.played}</strong></p>
+                <p>Total Wins: <strong>${stats.wins}</strong></p>
+                <p>Win Rate: <strong>${rate}%</strong></p>
+                <hr>
+                <p>Best Time: <strong>${formatTime(stats.bestTime)}</strong></p>
+                <p>Least Checks: <strong>${stats.leastChecks !== null ? stats.leastChecks : '-'}</strong></p>
+            `;
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function shareScore() {
+            let t = localStorage.getItem('nytMiniTodayTime') || seconds;
+            let c = localStorage.getItem('nytMiniTodayChecks') || checksUsed;
+            const textToShare = `I got today’s Mini Crossword in ${t} seconds and ${c} checks, try to beat my score! https://google.com`;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Mini Crossword Score',
+                    text: textToShare
+                }).catch(err => console.log('Error sharing:', err));
+            } else {
+                navigator.clipboard.writeText(textToShare).then(() => {
+                    alert("Score copied to clipboard!");
+                }).catch(err => {
+                    alert("Failed to copy text: " + err);
+                });
+            }
+        }
+        
+        function closeModal() { 
+            document.getElementById('modal-overlay').style.display = 'none'; 
+            if(gameWon) {
+                document.getElementById('completed-screen').style.display = 'flex';
+                startCountdown();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key.match(/^[a-zA-Z]$/)) typeLetter(e.key.toUpperCase());
+            else if (e.key === "Backspace") pressBackspace();
+            else if (e.key === "ArrowRight") { if (activeIndex % 5 !== 4 && numPattern[activeIndex + 1] !== ".") { activeIndex++; direction = 'across'; updateHighlights(); } }
+            else if (e.key === "ArrowLeft") { if (activeIndex % 5 !== 0 && numPattern[activeIndex - 1] !== ".") { activeIndex--; direction = 'across'; updateHighlights(); } }
+            else if (e.key === "ArrowDown") { if (activeIndex < 20 && numPattern[activeIndex + 5] !== ".") { activeIndex += 5; direction = 'down'; updateHighlights(); } }
+            else if (e.key === "ArrowUp") { if (activeIndex > 4 && numPattern[activeIndex - 5] !== ".") { activeIndex -= 5; direction = 'down'; updateHighlights(); } }
+        });
+
+        document.querySelectorAll('.key').forEach(btn => {
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                if (btn.id === 'bksp') pressBackspace();
+                else typeLetter(btn.innerText);
+            });
+        });
+
+        function fireConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            let particles = [];
+            let colors = ['#ffda00', '#a7d8ff', '#ff5e5e', '#5eff8a'];
+            
+            for(let i=0; i<100; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width, y: Math.random() * canvas.height - canvas.height,
+                    r: Math.random() * 6 + 4, dx: Math.random() * 4 - 2, dy: Math.random() * 5 + 2,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+            
+            function animate() {
+                requestAnimationFrame(animate);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color; ctx.fill();
+                    p.x += p.dx; p.y += p.dy;
+                    if(p.y > canvas.height) { p.y = -10; p.x = Math.random() * canvas.width; }
+                });
+            }
+            animate();
+        }
+
+        window.onload = initDaily;
+    </script>
+</body>
+</html>
